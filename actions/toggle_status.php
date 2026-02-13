@@ -1,62 +1,33 @@
 <?php
 require_once '../includes/db.php';
+header('Content-Type: application/json'); // Avisa que é um JSON
 
-header('Content-Type: application/json');
+$id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 
-// Recebe o JSON do Javascript
-$data = json_decode(file_get_contents('php://input'), true);
-$id = $data['id'] ?? null;
-
-// Recebe as datas do filtro atual (se vierem do JS), senão usa o mês atual real
-$data_inicio = $data['data_inicio'] ?? date('Y-m-01');
-$data_fim = $data['data_fim'] ?? date('Y-m-t');
+$response = ['success' => false];
 
 if ($id) {
-    try {
-        // 1. Busca o status atual para inverter
-        $stmt = $pdo->prepare("SELECT status FROM transacoes WHERE id = :id");
-        $stmt->execute([':id' => $id]);
-        $transacao = $stmt->fetch();
+    // 1. Descobre o status atual
+    $stmt = $pdo->prepare("SELECT status FROM transacoes WHERE id = :id");
+    $stmt->bindValue(':id', $id);
+    $stmt->execute();
+    $transacao = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($transacao) {
-            $novoStatus = ($transacao['status'] === 'pago') ? 'pendente' : 'pago';
-            
-            // 2. Atualiza no Banco
-            $update = $pdo->prepare("UPDATE transacoes SET status = :status WHERE id = :id");
-            $update->execute([':status' => $novoStatus, ':id' => $id]);
-            
-            // 3. Recalcula os Totais (RESPEITANDO AS DATAS DO DASHBOARD)
-            // Calculamos Entradas, Saídas e Pendentes apenas dentro do range de datas que o usuário está vendo
-            $sqlTotais = "SELECT 
-                SUM(CASE WHEN tipo = 'receita' AND status = 'pago' THEN valor ELSE 0 END) as entradas, 
-                SUM(CASE WHEN tipo = 'despesa' AND status = 'pago' THEN valor ELSE 0 END) as saidas, 
-                SUM(CASE WHEN tipo = 'despesa' AND status = 'pendente' THEN valor ELSE 0 END) as contas_a_pagar,
-                (SUM(CASE WHEN tipo = 'receita' AND status = 'pago' THEN valor ELSE 0 END) - 
-                 SUM(CASE WHEN tipo = 'despesa' AND status = 'pago' THEN valor ELSE 0 END)) as saldo
-                FROM transacoes 
-                WHERE data_transacao BETWEEN :inicio AND :fim";
+    if ($transacao) {
+        // 2. Inverte
+        $novo_status = ($transacao['status'] === 'pago') ? 'pendente' : 'pago';
 
-            $stmtTotais = $pdo->prepare($sqlTotais);
-            $stmtTotais->execute([':inicio' => $data_inicio, ':fim' => $data_fim]);
-            $totais = $stmtTotais->fetch(PDO::FETCH_ASSOC);
-
-            echo json_encode([
-                'success' => true, 
-                'novo_status' => $novoStatus,
-                'totais' => [
-                    'entradas' => (float)$totais['entradas'],
-                    'saidas' => (float)$totais['saidas'],
-                    'saldo' => (float)$totais['saldo'],
-                    'pendente' => (float)$totais['contas_a_pagar']
-                ]
-            ]);
-            exit;
+        // 3. Salva
+        $update = $pdo->prepare("UPDATE transacoes SET status = :status WHERE id = :id");
+        $update->bindValue(':status', $novo_status);
+        $update->bindValue(':id', $id);
+        
+        if ($update->execute()) {
+            $response['success'] = true;
+            $response['new_status'] = $novo_status; // Devolve o novo status ('pago' ou 'pendente')
         }
-    } catch (Exception $e) {
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
-        exit;
     }
 }
 
-echo json_encode(['success' => false, 'error' => 'ID inválido']);
+echo json_encode($response);
 exit;

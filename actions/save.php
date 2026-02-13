@@ -1,123 +1,60 @@
 <?php
 require_once '../includes/db.php';
+require_once '../includes/functions.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    
-    // --- 1. RECEBIMENTO DOS DADOS ---
-    $id = filter_input(INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT);
-    $descricao = trim($_POST['descricao']); // Remove espaços extras
-    
-    // Tratamento de Moeda (Blindado)
-    $valorRaw = $_POST['valor'];
-    // Se tiver vírgula, assumimos formato BR (remove ponto de milhar, troca vírgula por ponto)
-    if (strpos($valorRaw, ',') !== false) {
-        $valorRaw = str_replace('.', '', $valorRaw);
-        $valorRaw = str_replace(',', '.', $valorRaw);
-    }
-    $valorTotal = floatval($valorRaw);
-    
-    $dataBase = $_POST['data'];
-    $tipo = $_POST['tipo'];
-    $categoria_id = filter_input(INPUT_POST, 'categoria', FILTER_SANITIZE_NUMBER_INT);
-    $status = isset($_POST['status_pago']) ? 'pago' : 'pendente';
+// Recebe os dados
+$id = filter_input(INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT);
+$tipo = filter_input(INPUT_POST, 'tipo');
+$valor_total = filter_input(INPUT_POST, 'valor', FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION);
+$descricao = filter_input(INPUT_POST, 'descricao');
+$categoria_id = filter_input(INPUT_POST, 'categoria');
+$data_inicial = filter_input(INPUT_POST, 'data');
+$status = isset($_POST['status_pago']) ? 'pago' : 'pendente';
+$repeticao = filter_input(INPUT_POST, 'repeticao'); // unica, parcelada, fixa
+$qtd_parcelas = filter_input(INPUT_POST, 'parcelas', FILTER_SANITIZE_NUMBER_INT);
 
-    // Recorrência
-    $modoRepeticao = $_POST['repeticao'] ?? 'unica'; 
-    $qtdParcelas = (int)($_POST['parcelas'] ?? 1);
-    if($qtdParcelas < 1) $qtdParcelas = 1;
+// --- CORREÇÃO DO BUG DE DUPLICAÇÃO ---
 
-    // --- 2. VALIDAÇÃO ---
-    if ($descricao && $valorTotal > 0 && $dataBase && $categoria_id) {
-        
-        try {
-            $pdo->beginTransaction();
-
-            // === MODO EDIÇÃO (Não mexe no parcelamento, edita apenas o registro atual) ===
-            if (!empty($id)) {
-                $sql = "UPDATE transacoes SET descricao=:d, valor=:v, data_transacao=:dt, tipo=:t, categoria_id=:c, status=:s WHERE id=:id";
-                $stmt = $pdo->prepare($sql);
-                $stmt->execute([
-                    ':d' => $descricao, ':v' => $valorTotal, ':dt' => $dataBase, 
-                    ':t' => $tipo, ':c' => $categoria_id, ':s' => $status, ':id' => $id
-                ]);
-            } 
-            
-            // === MODO CRIAÇÃO (Gera 1 ou várias transações) ===
-            else {
-                $grupoId = uniqid('trans_'); // ID para agrupar as parcelas
-                
-                // PREPARA O VALOR DA PARCELA
-                // Se for "parcelada" E tiver mais de 1 parcela, divide. Senão, usa o valor cheio.
-                if ($modoRepeticao === 'parcelada' && $qtdParcelas > 1) {
-                    // Ex: 100 / 3 = 33.33
-                    $valorParcelaBase = floor(($valorTotal / $qtdParcelas) * 100) / 100;
-                    // Calcula a diferença de centavos (Ex: 0.01)
-                    $diferencaCentavos = round($valorTotal - ($valorParcelaBase * $qtdParcelas), 2);
-                } else {
-                    $valorParcelaBase = $valorTotal;
-                    $diferencaCentavos = 0;
-                }
-
-                // LOOP DE CRIAÇÃO
-                for ($i = 0; $i < $qtdParcelas; $i++) {
-                    
-                    // 1. Data (Incrementa meses)
-                    $dataObj = new DateTime($dataBase);
-                    $dataObj->modify("+$i month");
-                    $dataFinal = $dataObj->format('Y-m-d');
-
-                    // 2. Descrição e Valor
-                    $descFinal = $descricao;
-                    $valorFinal = $valorParcelaBase;
-
-                    if ($modoRepeticao === 'parcelada' && $qtdParcelas > 1) {
-                        // Adiciona (1/5) na descrição
-                        $num = $i + 1;
-                        $descFinal .= " ($num/$qtdParcelas)";
-                        
-                        // Soma os centavos que sobraram na PRIMEIRA parcela
-                        if ($i === 0) {
-                            $valorFinal += $diferencaCentavos;
-                        }
-                    } 
-                    // Se for Fixa (Assinatura), mantém valor total e nome limpo (ou adiciona 'Mensal' se preferir)
-                    
-                    // 3. Status (Só a primeira segue o status do form, o resto é pendente)
-                    $statusFinal = ($i === 0) ? $status : 'pendente';
-
-                    // 4. Salva no Banco
-                    $sql = "INSERT INTO transacoes (descricao, valor, data_transacao, tipo, categoria_id, status, parcela_atual, parcelas_totais, grupo_id) 
-                            VALUES (:d, :v, :dt, :t, :c, :s, :pa, :pt, :g)";
-                    
-                    $stmt = $pdo->prepare($sql);
-                    $stmt->execute([
-                        ':d' => $descFinal,
-                        ':v' => $valorFinal, // Aqui vai o valor dividido!
-                        ':dt' => $dataFinal,
-                        ':t' => $tipo,
-                        ':c' => $categoria_id,
-                        ':s' => $statusFinal,
-                        ':pa' => $i + 1,
-                        ':pt' => $qtdParcelas,
-                        ':g' => $grupoId
-                    ]);
-                }
-            }
-
-            $pdo->commit();
-            header('Location: ../index.php?status=success');
-            exit;
-
-        } catch (PDOException $e) {
-            $pdo->rollBack();
-            header('Location: ../index.php?status=error');
-            exit;
-        }
-    } else {
-        header('Location: ../index.php?status=error&msg=invalid_data');
-        exit;
-    }
-} else {
-    header('Location: ../index.php');
-    exit;
+// Se for "Única", forçamos parcelas = 1 para evitar loop errado
+if ($repeticao === 'unica' || empty($qtd_parcelas)) {
+    $qtd_parcelas = 1;
 }
+
+// Se for edição (ID existe), atualiza apenas um registro
+if ($id) {
+    $sql = "UPDATE transacoes SET tipo=?, valor=?, descricao=?, categoria_id=?, data_transacao=?, status=? WHERE id=?";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$tipo, $valor_total, $descricao, $categoria_id, $data_inicial, $status, $id]);
+} 
+// Se for nova transação (Insert)
+else {
+    // Calcula o valor da parcela (se for parcelada, divide. Se for fixa ou única, é o valor cheio)
+    $valor_parcela = $valor_total;
+    if ($repeticao === 'parcelada' && $qtd_parcelas > 0) {
+        $valor_parcela = $valor_total / $qtd_parcelas;
+    }
+
+    // LOOP DE INSERÇÃO
+    for ($i = 0; $i < $qtd_parcelas; $i++) {
+        
+        // Cálculo da Data:
+        // Se for a primeira (i=0), usa a data original.
+        // Se for as próximas, soma meses.
+        $data_vencimento = date('Y-m-d', strtotime("+$i month", strtotime($data_inicial)));
+
+        // Descrição da parcela (ex: "Compra 1/5") apenas se não for única
+        $descricao_final = $descricao;
+        if ($repeticao !== 'unica') {
+            $num = $i + 1;
+            $descricao_final .= " ($num/$qtd_parcelas)";
+        }
+
+        $sql = "INSERT INTO transacoes (tipo, valor, descricao, categoria_id, data_transacao, status) VALUES (?, ?, ?, ?, ?, ?)";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$tipo, $valor_parcela, $descricao_final, $categoria_id, $data_vencimento, $status]);
+    }
+}
+
+// Redireciona de volta
+header('Location: ../index.php?status=success');
+exit;

@@ -506,7 +506,45 @@ input.flatpickr-mobile {
         document.getElementById('inputStatus').checked = (t.status === 'pago');
     }
     window.confirmarExclusao = function(id) { if(confirm('Excluir?')) window.location.href = 'actions/delete.php?id=' + id; }
-    window.toggleStatus = function(id) { window.location.href = 'actions/toggle_status.php?id=' + id; }
+    window.toggleStatus = function(id, element) {
+    // 1. Guarda o estado atual caso precise reverter (backup)
+    const originalClass = element.className;
+    const originalText = element.innerText;
+
+    // 2. Lógica Visual Instantânea (Optimistic UI)
+    const isAtualmentePago = element.classList.contains('pago');
+    
+    // Define o novo visual
+    if (isAtualmentePago) {
+        element.className = 'status-badge pendente';
+        element.innerText = 'Pendente';
+    } else {
+        element.className = 'status-badge pago';
+        element.innerText = 'Pago';
+    }
+
+    // 3. Envia para o servidor em segundo plano (Sem recarregar a tela)
+    fetch('actions/toggle_status.php?id=' + id)
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) {
+                // Se der erro no servidor, desfaz a mudança visual
+                element.className = originalClass;
+                element.innerText = originalText;
+                alert('Erro ao atualizar status.');
+            } else {
+                // Sucesso! (Opcional: Mostrar um toast pequeno)
+                // Se quiser atualizar os totais lá em cima sem recarregar,
+                // seria necessário um código extra, mas para o botão isso basta.
+            }
+        })
+        .catch(error => {
+            // Erro de conexão
+            console.error('Erro:', error);
+            element.className = originalClass;
+            element.innerText = originalText;
+        });
+}
 
     new Chart(document.getElementById('myChart').getContext('2d'), {
         type: 'doughnut', 

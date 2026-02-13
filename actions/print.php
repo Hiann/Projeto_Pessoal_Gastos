@@ -157,11 +157,11 @@ $saldo = $totalEntradas - $totalSaidas;
 
         <div class="kpi-row">
             <div class="kpi-card">
-                <div class="kpi-label">Entradas (Pago)</div>
+                <div class="kpi-label">Entradas</div>
                 <div class="kpi-value green">R$ <?= number_format($totalEntradas, 2, ',', '.') ?></div>
             </div>
             <div class="kpi-card">
-                <div class="kpi-label">Saídas (Pago)</div>
+                <div class="kpi-label">Saídas</div>
                 <div class="kpi-value red">R$ <?= number_format($totalSaidas, 2, ',', '.') ?></div>
             </div>
             <div class="kpi-card">

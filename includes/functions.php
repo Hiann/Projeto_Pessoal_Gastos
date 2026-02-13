@@ -28,7 +28,7 @@ function getStatusClass($status) {
  * Retorna o texto amigável do status
  */
 function getStatusLabel($status) {
-    return $status === 'pago' ? 'Concluído' : 'Pendente';
+    return $status === 'pago' ? 'Pago' : 'Pendente';
 }
 
 /**
