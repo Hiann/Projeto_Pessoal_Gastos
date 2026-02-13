@@ -1,0 +1,7 @@
+.DS_Store
+Thumbs.db
+.vscode/
+/vendor
+
+# Ignora o arquivo de conexão real se tiver senhas reais
+includes/db.php
