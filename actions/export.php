@@ -13,7 +13,7 @@ $data_inicio = filter_input(INPUT_GET, 'data_inicio', FILTER_SANITIZE_SPECIAL_CH
 $data_fim = filter_input(INPUT_GET, 'data_fim', FILTER_SANITIZE_SPECIAL_CHARS) ?? date('Y-m-t');
 
 // Nome do Arquivo
-$meses = ['01'=>'Janeiro','02'=>'Fevereiro','03'=>'Março','04'=>'Abril','05'=>'Maio','06'=>'Junho','07'=>'Julho','08'=>'Agosto','09'=>'Setembro','10'=>'Outubro','11'=>'Novembro','12'=>'Dezembro'];
+$meses = ['01' => 'Janeiro', '02' => 'Fevereiro', '03' => 'Março', '04' => 'Abril', '05' => 'Maio', '06' => 'Junho', '07' => 'Julho', '08' => 'Agosto', '09' => 'Setembro', '10' => 'Outubro', '11' => 'Novembro', '12' => 'Dezembro'];
 $mesAtual = $meses[date('m', strtotime($data_inicio))];
 $anoAtual = date('Y', strtotime($data_inicio));
 $arquivo = 'Relatorio_' . $mesAtual . '_' . $anoAtual . '.xls';
@@ -34,192 +34,202 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute([':inicio' => $data_inicio, ':fim' => $data_fim]);
 $dados = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// --- CORREÇÃO: CÁLCULO DOS TOTAIS (Faltava no seu código) ---
+// --- CORREÇÃO: CÁLCULO DOS TOTAIS ---
 $totalEntradas = 0;
 $totalSaidas = 0;
-foreach($dados as $d) {
-    if($d['status'] == 'pago') {
-        if($d['tipo'] == 'receita') $totalEntradas += $d['valor'];
-        if($d['tipo'] == 'despesa') $totalSaidas += $d['valor'];
+foreach ($dados as $d) {
+    if ($d['status'] == 'pago') {
+        if ($d['tipo'] == 'receita') $totalEntradas += $d['valor'];
+        if ($d['tipo'] == 'despesa') $totalSaidas += $d['valor'];
     }
 }
 $saldo = $totalEntradas - $totalSaidas;
 // -----------------------------------------------------------
 ?>
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
 <meta charset="UTF-8">
 <style>
+        body {
+            font-family: Calibri, Arial, sans-serif;
+            font-size: 11pt;
+        }
 
-body {
-    font-family: Calibri, Arial, sans-serif;
-    font-size: 11pt;
-}
+        /* ================= HEADER ================= */
 
-/* ================= HEADER ================= */
+        .titulo {
+            background-color: #1F4E78;
+            color: #FFFFFF;
+            font-size: 20pt;
+            font-weight: bold;
+            height: 60px;
+            padding-left: 15px;
+            vertical-align: middle;
+        }
 
-.titulo {
-    background-color: #1F4E78;
-    color: #FFFFFF;
-    font-size: 20pt;
-    font-weight: bold;
-    height: 60px;
-    padding-left: 15px;
-    vertical-align: middle;
-}
+        .meta {
+            background-color: #F2F2F2;
+            font-size: 9pt;
+            padding: 10px;
+            text-align: right;
+        }
 
-.meta {
-    background-color: #F2F2F2;
-    font-size: 9pt;
-    padding: 10px;
-    text-align: right;
-}
+        /* ================= KPIs ================= */
 
-/* ================= KPIs ================= */
+        .kpi-label {
+            background-color: #E7EEF5;
+            font-weight: bold;
+            text-align: center;
+            border: 1px solid #D0D0D0;
+            height: 25px;
+        }
 
-.kpi-label {
-    background-color: #E7EEF5;
-    font-weight: bold;
-    text-align: center;
-    border: 1px solid #D0D0D0;
-    height: 25px;
-}
+        .kpi-value {
+            font-size: 16pt;
+            font-weight: bold;
+            text-align: center;
+            border: 1px solid #D0D0D0;
+            height: 45px;
+        }
 
-.kpi-value {
-    font-size: 16pt;
-    font-weight: bold;
-    text-align: center;
-    border: 1px solid #D0D0D0;
-    height: 45px;
-}
+        .entrada {
+            color: #006100;
+        }
 
-.entrada { color: #006100; }
-.saida { color: #9C0006; }
-.saldo-positivo { color: #1F4E78; }
-.saldo-negativo { color: #FF0000; }
+        .saida {
+            color: #9C0006;
+        }
 
-/* ================= TABELA ================= */
+        .saldo-positivo {
+            color: #1F4E78;
+        }
 
-th {
-    background-color: #1F1F1F;
-    color: #FFFFFF;
-    font-weight: bold;
-    height: 32px;
-    border: 1px solid #A6A6A6;
-}
+        .saldo-negativo {
+            color: #FF0000;
+        }
 
-td {
-    border: 1px solid #D9D9D9;
-    padding: 6px;
-    height: 26px;
-}
+        /* ================= TABELA ================= */
 
-.text-center { text-align: center; }
-.text-right { text-align: right; }
-.text-left { text-align: left; }
+        th {
+            background-color: #1F1F1F;
+            color: #FFFFFF;
+            font-weight: bold;
+            height: 32px;
+            border: 1px solid #A6A6A6;
+        }
 
-.money {
-    mso-number-format:"R$ \#\,\#\#0\.00";
-    font-weight: bold;
-}
+        td {
+            border: 1px solid #D9D9D9;
+            padding: 6px;
+            height: 26px;
+        }
 
-.status-pago {
-    background-color: #C6EFCE;
-    color: #006100;
-    font-weight: bold;
-}
+        .text-center {
+            text-align: center;
+        }
 
-.status-pendente {
-    background-color: #FFC7CE;
-    color: #9C0006;
-    font-weight: bold;
-}
+        .text-right {
+            text-align: right;
+        }
 
-.linha-alternada {
-    background-color: #FAFAFA;
-}
+        .text-left {
+            text-align: left;
+        }
 
-</style>
-</head>
+        .money {
+            mso-number-format: "R$ \#\,\#\#0\.00";
+            font-weight: bold;
+        }
 
-<body>
+        .status-pago {
+            background-color: #C6EFCE;
+            color: #006100;
+            font-weight: bold;
+        }
 
-<table width="100%" cellspacing="0" cellpadding="0">
+        .status-pendente {
+            background-color: #FFC7CE;
+            color: #9C0006;
+            font-weight: bold;
+        }
 
-<tr>
-    <td colspan="4" class="titulo">
-        RELATÓRIO FINANCEIRO
-    </td>
-    <td colspan="2" class="meta">
-        <b>Gerado por:</b> <?= $usuarioGerador ?><br>
-        <b>Data:</b> <?= date('d/m/Y') ?> às <?= $horaGeracao ?>
-    </td>
-</tr>
+        .linha-alternada {
+            background-color: #FAFAFA;
+        }
+</style><table width="100%" cellspacing="0" cellpadding="0">
 
-<tr><td colspan="6" height="20"></td></tr>
+        <tr>
+            <td colspan="4" class="titulo">
+                RELATÓRIO FINANCEIRO
+            </td>
+            <td colspan="2" class="meta">
+                <b>Gerado por:</b> <?= $usuarioGerador ?><br>
+                <b>Data:</b> <?= date('d/m/Y') ?> às <?= $horaGeracao ?>
+            </td>
+        </tr>
 
-<tr>
-    <td colspan="2" class="kpi-label">TOTAL ENTRADAS</td>
-    <td class="kpi-label">TOTAL SAÍDAS</td>
-    <td colspan="2" class="kpi-label">SALDO ATUAL</td>
-    <td colspan="1"></td>
-</tr>
+        <tr>
+            <td colspan="6" height="20"></td>
+        </tr>
 
-<tr>
-    <td colspan="2" class="kpi-value entrada money"><?= $totalEntradas ?></td>
-    <td class="kpi-value saida money"><?= $totalSaidas ?></td>
-    <td colspan="2" class="kpi-value money <?= $saldo >= 0 ? 'saldo-positivo' : 'saldo-negativo' ?>">
-        <?= $saldo ?>
-    </td>
-    <td colspan="1"></td>
-</tr>
+        <tr>
+            <td colspan="2" class="kpi-label">TOTAL ENTRADAS</td>
+            <td class="kpi-label">TOTAL SAÍDAS</td>
+            <td colspan="2" class="kpi-label">SALDO ATUAL</td>
+            <td colspan="1"></td>
+        </tr>
 
-<tr><td colspan="6" height="25"></td></tr>
+        <tr>
+            <td colspan="2" align="center" class="kpi-value entrada money"><?= $totalEntradas ?></td>
+            <td align="center" class="kpi-value saida money"><?= $totalSaidas ?></td>
+            <td colspan="2" align="center" class="kpi-value money <?= $saldo >= 0 ? 'saldo-positivo' : 'saldo-negativo' ?>">
+                <?= $saldo ?>
+            </td>
+            <td colspan="1"></td>
+        </tr>
 
-<tr>
-    <th>DESCRIÇÃO</th>
-    <th>CATEGORIA</th>
-    <th>TIPO</th>
-    <th>PARCELA</th>
-    <th>VALOR</th>
-    <th>STATUS</th>
-</tr>
+        <tr>
+            <td colspan="6" height="25"></td>
+        </tr>
 
-<?php 
-$linha = 0;
-foreach($dados as $d):
+        <tr>
+            <th>DESCRIÇÃO</th>
+            <th>CATEGORIA</th>
+            <th>TIPO</th>
+            <th>PARCELA</th>
+            <th>VALOR</th>
+            <th>STATUS</th>
+        </tr>
 
-$linha++;
-$classeLinha = ($linha % 2 == 0) ? 'linha-alternada' : '';
+        <?php
+        $linha = 0;
+        foreach ($dados as $d):
 
-$tipo = ucfirst($d['tipo']);
-$parcela = ($d['parcelas_totais'] > 1) ? 
-    $d['parcela_atual'].'/'.$d['parcelas_totais'] : '-';
+            $linha++;
+            $classeLinha = ($linha % 2 == 0) ? 'linha-alternada' : '';
 
-// Limpa a descrição: Remove coisas como (1/5) ou (02/12)
-$descricaoLimpa = preg_replace('/\s*\(\d+\/\d+\)/', '', $d['descricao']);
+            $tipo = ucfirst($d['tipo']);
+            $parcela = ($d['parcelas_totais'] > 1) ?
+                $d['parcela_atual'] . '/' . $d['parcelas_totais'] : '-';
 
-$corValor = ($d['tipo'] == 'receita') ? '#006100' : '#9C0006';
-$classStatus = ($d['status'] == 'pago') ? 'status-pago' : 'status-pendente';
-?>
+            // Limpa a descrição: Remove coisas como (1/5) ou (02/12)
+            $descricaoLimpa = preg_replace('/\s*\(\d+\/\d+\)/', '', $d['descricao']);
 
-<tr class="<?= $classeLinha ?>">
-    <td class="text-left"><?= htmlspecialchars($descricaoLimpa) ?></td>
-    <td class="text-center"><?= htmlspecialchars($d['categoria_nome']) ?></td>
-    <td class="text-center"><?= $tipo ?></td>
-    <td class="text-center" style='mso-number-format:"\@" '><?= $parcela ?></td>
-    <td class="text-right money" style="color: <?= $corValor ?>;">
-        <?= $d['valor'] ?>
-    </td>
-    <td class="text-center <?= $classStatus ?>">
-        <?= strtoupper($d['status']) ?>
-    </td>
-</tr>
+            $corValor = ($d['tipo'] == 'receita') ? '#006100' : '#9C0006';
+            $classStatus = ($d['status'] == 'pago') ? 'status-pago' : 'status-pendente';
+        ?>
 
-<?php endforeach; ?>
+            <tr class="<?= $classeLinha ?>">
+                <td class="text-left"><?= htmlspecialchars($descricaoLimpa) ?></td>
+                <td class="text-center"><?= htmlspecialchars($d['categoria_nome']) ?></td>
+                <td class="text-center"><?= $tipo ?></td>
+                <td class="text-center" style='mso-number-format:"\@" '><?= $parcela ?></td>
+                <td class="text-right money" style="color: <?= $corValor ?>;">
+                    <?= $d['valor'] ?>
+                </td>
+                <td class="text-center <?= $classStatus ?>">
+                    <?= strtoupper($d['status']) ?>
+                </td>
+            </tr>
 
-</table>
+        <?php endforeach; ?>
 
-</body>
-</html>
+    </table>
