@@ -623,22 +623,39 @@ foreach ($chartData as $item) $totalGrafico += $item['total'];
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($transacoes as $t): ?>
+                                <?php foreach ($transacoes as $t):
+
+                                    $hoje = date('Y-m-d');
+
+                                    // 1. Verifica se a data da conta é menor que hoje
+                                    $data_passou = ($t['data_transacao'] < $hoje);
+
+                                    // 2. Verifica se o status atual é pendente
+                                    $is_pendente = ($t['status'] === 'pendente');
+                                ?>
                                     <tr>
-                                        <td><span class="status-badge <?= $t['status'] ?>" onclick="toggleStatus(<?= $t['id'] ?>, this)"><?= getStatusLabel($t['status']) ?></span></td>
+                                        <td><span class="status-badge <?= $t['status'] ?>" style="cursor: pointer;" onclick="mudarStatusConta(<?= $t['id'] ?>, this)"><?= getStatusLabel($t['status']) ?></span></td>
                                         <td class="desc-cell">
                                             <div class="icon-cat" style="background: <?= $t['cor_hex'] ?>20; color: <?= $t['cor_hex'] ?>"><i class="fas fa-receipt"></i></div> <?= htmlspecialchars($t['descricao']) ?>
                                         </td>
                                         <td><?= $t['cat_nome'] ?></td>
-                                        <td><?= date('d/m/Y', strtotime($t['data_transacao'])) ?></td>
+
+                                        <td>
+                                            <?= date('d/m/Y', strtotime($t['data_transacao'])) ?>
+
+                                            <?php if ($data_passou): ?>
+                                                <br>
+                                                <span class="alerta-atraso" style="color: #ef4444; font-size: 11px; font-weight: 600; display: <?= $is_pendente ? 'inline-flex' : 'none' ?>; align-items: center; gap: 4px; margin-top: 2px;">
+                                                    <i class="fas fa-exclamation-circle"></i> Atrasada
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>
+
                                         <td class="amount <?= $t['tipo'] ?>"><?= $t['tipo'] == 'despesa' ? '-' : '+' ?> <?= formatarMoeda($t['valor']) ?></td>
                                         <td style="display: flex; gap: 8px;">
                                             <?php
-                                            // REGRA DE EXCLUSÃO BLINDADA
                                             $is_grupo = !empty($t['hash_pedido']);
                                             $num_parcela = isset($t['parcela_atual']) ? (int)$t['parcela_atual'] : 0;
-
-                                            // Pode deletar APENAS se: Não for grupo (transação única) OU for um grupo e a parcela for estritamente a 1
                                             $pode_deletar = (!$is_grupo) || ($is_grupo && $num_parcela === 1);
                                             ?>
 
@@ -1001,6 +1018,84 @@ foreach ($chartData as $item) $totalGrafico += $item['total'];
         });
     </script>
     <script src="assets/js/script.js?v=<?= time() ?>"></script>
+
+    <script>
+async function mudarStatusConta(id, element) {
+    try {
+        const textoOriginal = element.innerText;
+        element.innerText = '...';
+        element.style.opacity = '0.5';
+
+        // 1. Pega as datas da URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const hoje = new Date();
+        const inicioPadrao = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
+        const fimPadrao = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
+
+        const dataInicio = urlParams.get('data_inicio') || inicioPadrao;
+        const dataFim = urlParams.get('data_fim') || fimPadrao;
+
+        // 2. Chama o PHP
+        const response = await fetch('actions/toggle_status.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id, data_inicio: dataInicio, data_fim: dataFim })
+        });
+
+        // 3. Leitura bruta (Se o PHP quebrar, o erro vai aparecer aqui)
+        const text = await response.text();
+        let result;
+        try {
+            result = JSON.parse(text);
+        } catch (e) {
+            alert("ERRO CRÍTICO NO PHP! O servidor respondeu:\n\n" + text);
+            element.innerText = textoOriginal;
+            element.style.opacity = '1';
+            return;
+        }
+
+        // 4. Se deu tudo certo, faz a mágica na tela
+        if (result.success) {
+            // Atualiza o botão
+            element.className = `status-badge ${result.novo_status}`;
+            element.innerText = result.novo_status === 'pago' ? 'PAGO' : 'PENDENTE';
+            element.style.opacity = '1';
+
+            // Atualiza o aviso de atraso
+            let linhaTabela = element.closest('tr');
+            if (linhaTabela) {
+                let avisoAtraso = linhaTabela.querySelector('.alerta-atraso');
+                if (avisoAtraso) {
+                    avisoAtraso.style.display = result.novo_status === 'pago' ? 'none' : 'inline-flex';
+                }
+            }
+
+            // Atualiza os totais lá em cima
+            const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+            document.getElementById('total-entradas').innerText = fmt.format(result.totais.entradas);
+            document.getElementById('total-saidas').innerText = fmt.format(result.totais.saidas);
+            
+            const elSaldo = document.getElementById('total-saldo');
+            elSaldo.innerText = fmt.format(result.totais.saldo);
+            elSaldo.style.color = result.totais.saldo >= 0 ? '#10b981' : '#ef4444';
+
+            document.getElementById('total-pendente').innerText = fmt.format(result.totais.pendente);
+
+        } else {
+            alert("O PHP não permitiu a alteração: " + result.message);
+            element.innerText = textoOriginal;
+            element.style.opacity = '1';
+        }
+
+    } catch (error) {
+        alert("Ocorreu um erro de conexão com o servidor.");
+        console.error(error);
+        element.innerText = 'ERRO';
+        element.style.opacity = '1';
+    }
+}
+</script>
+
 </body>
 
 </html>

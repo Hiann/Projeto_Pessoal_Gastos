@@ -205,7 +205,7 @@ window.showToast = function(message, type = 'success') {
 
 window.formatarMoedaJS = function(valor) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor); }
 
-// --- FUNÇÃO ATUALIZADA: TOGGLE STATUS (CORRIGIDA) ---
+// --- FUNÇÃO ATUALIZADA: TOGGLE STATUS (COM MODO DEBUG ATIVADO) ---
 window.toggleStatus = async function(id, element) {
     try {
         const originalText = element.innerText;
@@ -242,6 +242,24 @@ window.toggleStatus = async function(id, element) {
             element.innerText = result.novo_status === 'pago' ? 'PAGO' : 'PENDENTE';
             element.style.opacity = '1';
             
+            // --- CÓDIGO PARA ANIMAR O AVISO DE ATRASO ---
+            // Procura a linha (<tr>) atual onde o botão foi clicado
+            let linhaTabela = element.closest('tr');
+            if (linhaTabela) {
+                // Procura o aviso de atraso dentro dessa mesma linha
+                let avisoAtraso = linhaTabela.querySelector('.alerta-atraso');
+                
+                if (avisoAtraso) {
+                    // Se o novo status for pago, esconde o aviso. Se for pendente, mostra.
+                    if (result.novo_status === 'pago') {
+                        avisoAtraso.style.display = 'none';
+                    } else {
+                        avisoAtraso.style.display = 'inline-flex';
+                    }
+                }
+            }
+            // --------------------------------------------
+
             // Atualiza os Cards do Topo com os valores corretos
             const elEntradas = document.getElementById('total-entradas');
             if(elEntradas) {
@@ -257,18 +275,24 @@ window.toggleStatus = async function(id, element) {
                 document.getElementById('total-pendente').innerText = fmt.format(result.totais.pendente);
             }
             
-            window.showToast('Status atualizado!', 'success');
+            if(typeof window.showToast === 'function') {
+                window.showToast('Status atualizado!', 'success');
+            }
         } else { 
-            window.showToast('Erro ao atualizar.', 'error'); 
+            // SE O PHP RECUSAR, MOSTRA O MOTIVO EXATO:
+            alert('O PHP Recusou. Motivo: ' + result.message); 
             element.innerText = originalText; 
             element.style.opacity = '1';
         }
     } catch (error) { 
-        console.error('Erro:', error); 
+        // SE DER ERRO FATAL (Ex: PHP quebrou e não gerou JSON)
+        alert('Erro Fatal de Comunicação! Pressione F12 e olhe a aba Network (Rede).');
+        console.error('Erro Técnico:', error); 
         element.innerText = originalText; 
         element.style.opacity = '1';
     }
 }
+
 window.confirmarExclusao = function(id) {
     if (confirm('Tem certeza que deseja excluir esta transação permanentemente?')) {
         // 1. Pega os parâmetros atuais da URL (Onde você está agora)
